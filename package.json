@@ -1,0 +1,21 @@
+{
+  "name": "litvmassasas-public",
+  "version": "1.0.0",
+  "description": "Utility scripts for LiteForge/LitEVM automation.",
+  "main": "app/midaspredict_trader.js",
+  "scripts": {
+    "check:js": "node --check app/midaspredict_trader.js && node --check app/midaspredict_faucet.js && node --check app/midaspredict_checkin.js && node --check app/liteforge_native_balance.js && node --check app/liteforge_claim.js"
+  },
+  "keywords": [
+    "liteforge",
+    "litevm",
+    "ethers"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "dependencies": {
+    "@arbitrum/sdk": "^4.0.5",
+    "ethers": "^5.8.0"
+  }
+}

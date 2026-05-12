@@ -1,0 +1,5 @@
+# Optional. One wallet address per line.
+# Used by browser faucet flows that need addresses without private keys.
+#
+# 0x0000000000000000000000000000000000000000
+#

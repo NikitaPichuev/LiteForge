@@ -1,0 +1,7 @@
+# Optional. One proxy per line.
+# Supported examples:
+# http://user:pass@host:port
+# socks5://user:pass@host:port
+# host:port:user:pass
+# host:port
+#
