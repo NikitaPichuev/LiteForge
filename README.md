@@ -169,6 +169,22 @@ Slippage is fixed by the menu at 300 bps (3%). The script runs all wallets from 
 
 Sell-back mode checks ERC20 balances for the selected token, or all LitVMSwap tokens, approves the router if needed, then swaps the selected percent back to native `zkLTC`. Zero balances and tokens without a valid quote are skipped.
 
+### 11. SweepHaus - Lit Family mint
+
+Runs `app/sweephaus_lit_family_mint.py`.
+
+Mints the SweepHaus Lit Family Collection quest NFTs on LiteForge:
+
+- `Ms. Lit` - `0x53049cae50D90F21Cd9b458dDfbCfA6bb1CA0ba7`
+- `Kid. Lit` - `0x978248AfC00C240437376370D7649C6d24423ef5`
+- `Cat. Lit` - `0x20d6A65731367D015D7eE1e28643Cb6f817D3eE1`
+
+Quest page: `https://sweep.haus/quests/Lit_Family_Collection`.
+
+The script calls the thirdweb ERC1155 `claim` function on LiteForge chain `4441`. Default menu mode runs all wallets from `keys.txt`, mints all three collections, and skips a collection if the wallet already owns tokenId `0`.
+
+The known mint price used by the site is `0.000202020202020202 zkLTC` per NFT. The menu asks only for collection scope and quantity per collection.
+
 ## MidasPredict Submenu
 
 Midas scripts use:
@@ -277,6 +293,7 @@ node app\midaspredict_trader.js sell-all --slippage-bps 300 --send
 node app\midaspredict_trader.js redeem-all --send
 python app\litvmswap_swaps.py --swap-token random --swaps 1-3 --amount 0.001-0.003 --slippage-bps 300 --send
 python app\litvmswap_swaps.py --mode sell-back --sell-token all --sell-pct 100 --slippage-bps 300 --send
+python app\sweephaus_lit_family_mint.py --collection all --quantity 1 --send
 ```
 
 ## Logs

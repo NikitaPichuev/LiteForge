@@ -22,6 +22,7 @@ echo  7. Infinityname LiteForge - mint .litevm
 echo  8. MidasPredict - faucet/buy/sell/redeem
 echo  9. LiteForge - native zkLTC balance checker
 echo  10. LitVMSwap - swaps
+echo  11. SweepHaus - Lit Family mint
 echo  0. Exit
 echo.
 set /p CHOICE=Choose action: 
@@ -36,6 +37,7 @@ if "%CHOICE%"=="7" goto iname
 if "%CHOICE%"=="8" goto midaspredict
 if "%CHOICE%"=="9" goto liteforge_native_balance
 if "%CHOICE%"=="10" goto litvmswap
+if "%CHOICE%"=="11" goto sweephaus_lit_family
 if "%CHOICE%"=="0" exit /b 0
 
 echo.
@@ -679,6 +681,64 @@ if not "%LAST_LITVMSWAP_LOG%"=="" (
     echo Last LitVMSwap log: %LAST_LITVMSWAP_LOG%
 ) else (
     echo [WARN] LitVMSwap log was not found.
+)
+pause
+goto menu
+
+:sweephaus_lit_family
+cls
+call :check_python
+echo ============================================
+echo  SweepHaus - Lit Family Collection
+echo ============================================
+echo.
+echo This sends real LiteForge mint transactions for:
+echo   1. Ms. Lit
+echo   2. Kid. Lit
+echo   3. Cat. Lit
+echo.
+echo Quest page:
+echo   https://sweep.haus/quests/Lit_Family_Collection
+echo Default mode mints all three collections and skips already owned tokenId 0.
+echo.
+echo Collection:
+echo   1. All three
+echo   2. Ms. Lit
+echo   3. Kid. Lit
+echo   4. Cat. Lit
+set SWEEP_COLLECTION=
+set /p SWEEP_COLLECTION_CHOICE=Choose collection [1]: 
+if "%SWEEP_COLLECTION_CHOICE%"=="" set SWEEP_COLLECTION_CHOICE=1
+if "%SWEEP_COLLECTION_CHOICE%"=="1" set SWEEP_COLLECTION=all
+if "%SWEEP_COLLECTION_CHOICE%"=="2" set SWEEP_COLLECTION=ms-lit
+if "%SWEEP_COLLECTION_CHOICE%"=="3" set SWEEP_COLLECTION=kid-lit
+if "%SWEEP_COLLECTION_CHOICE%"=="4" set SWEEP_COLLECTION=cat-lit
+if "%SWEEP_COLLECTION%"=="" (
+    echo [ERROR] Unknown collection option.
+    pause
+    goto menu
+)
+set /p SWEEP_QUANTITY=Quantity per collection [1]: 
+if "%SWEEP_QUANTITY%"=="" set SWEEP_QUANTITY=1
+echo.
+python app\run_all_keys.py --pause-min 5 --pause-max 15 --success-if-any -- python app\sweephaus_lit_family_mint.py --collection "%SWEEP_COLLECTION%" --quantity "%SWEEP_QUANTITY%" --send
+set EXIT_CODE=%ERRORLEVEL%
+echo.
+set LAST_SWEEP_LOG=
+for /f "delims=" %%F in ('dir /b /a:-d /o:-d "logs\sweephaus_lit_family_*.log" 2^>nul') do (
+    set LAST_SWEEP_LOG=%CD%\logs\%%F
+    goto sweep_log_found
+)
+:sweep_log_found
+if "%EXIT_CODE%"=="0" (
+    echo [OK] SweepHaus mint completed.
+) else (
+    echo [ERROR] SweepHaus mint failed.
+)
+if not "%LAST_SWEEP_LOG%"=="" (
+    echo Last SweepHaus log: %LAST_SWEEP_LOG%
+) else (
+    echo [WARN] SweepHaus log was not found.
 )
 pause
 goto menu
