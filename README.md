@@ -147,6 +147,24 @@ Runs `app/liteforge_native_balance.js`.
 
 Checks native zkLTC balance for all wallets in `keys.txt` and prints every balance plus total.
 
+### 10. LitVMSwap - swaps
+
+Runs `app/litvmswap_swaps.py`.
+
+Sends real swaps through the LitVMSwap LiteForge router:
+
+- source token: native `zkLTC`
+- router: `0xF456737D17C2Bbb348fd4F7D1b000D62A46FB3b5`
+- wrapped native: `0x315374AA9b5536037Cc1Efeea2439CCC0913A77e`
+
+The menu asks for:
+
+- target token: `ZKUSDC`, `LitVMSwap`, `ZKUSDT`, `LETH`, `ZKBTC`, `LXRP`, `brBNB`, or random
+- min/max swaps per wallet
+- min/max native `zkLTC` amount per swap
+
+Slippage is fixed by the menu at 300 bps (3%). The script runs all wallets from `keys.txt` through `app/run_all_keys.py`.
+
 ## MidasPredict Submenu
 
 Midas scripts use:
@@ -253,6 +271,7 @@ node app\midaspredict_trader.js random-buy --source all --count 2 --amount-min 1
 node app\midaspredict_trader.js random-buy --source standard --count-min 2 --count-max 4 --usdc-percent 90 --auto-min-trade --send
 node app\midaspredict_trader.js sell-all --slippage-bps 300 --send
 node app\midaspredict_trader.js redeem-all --send
+python app\litvmswap_swaps.py --swap-token random --swaps 1-3 --amount 0.001-0.003 --slippage-bps 300 --send
 ```
 
 ## Logs

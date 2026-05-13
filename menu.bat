@@ -21,6 +21,7 @@ echo  6. OnChainGM LiteForge - GM + deploy
 echo  7. Infinityname LiteForge - mint .litevm
 echo  8. MidasPredict - faucet/buy/sell/redeem
 echo  9. LiteForge - native zkLTC balance checker
+echo  10. LitVMSwap - swaps
 echo  0. Exit
 echo.
 set /p CHOICE=Choose action: 
@@ -34,6 +35,7 @@ if "%CHOICE%"=="6" goto onchaingm_liteforge
 if "%CHOICE%"=="7" goto iname
 if "%CHOICE%"=="8" goto midaspredict
 if "%CHOICE%"=="9" goto liteforge_native_balance
+if "%CHOICE%"=="10" goto litvmswap
 if "%CHOICE%"=="0" exit /b 0
 
 echo.
@@ -558,6 +560,77 @@ if not "%LAST_LITE_BALANCE_LOG%"=="" (
     echo Last balance log: %CD%\%LAST_LITE_BALANCE_LOG%
 ) else (
     echo [WARN] Balance log was not found.
+)
+pause
+goto menu
+
+:litvmswap
+cls
+call :check_python
+echo ============================================
+echo  LitVMSwap - SWAPS
+echo ============================================
+echo.
+echo This sends real LiteForge transactions through LitVMSwap.
+echo Source token is native zkLTC.
+echo Router:
+echo   0xF456737D17C2Bbb348fd4F7D1b000D62A46FB3b5
+echo.
+echo Target token:
+echo   1. ZKUSDC
+echo   2. LitVMSwap
+echo   3. ZKUSDT
+echo   4. LETH
+echo   5. ZKBTC
+echo   6. LXRP
+echo   7. brBNB
+echo   8. Random
+set LITVMSWAP_TOKEN=
+set /p LITVMSWAP_TOKEN_CHOICE=Choose token [8]: 
+if "%LITVMSWAP_TOKEN_CHOICE%"=="" set LITVMSWAP_TOKEN_CHOICE=8
+if "%LITVMSWAP_TOKEN_CHOICE%"=="1" set LITVMSWAP_TOKEN=ZKUSDC
+if "%LITVMSWAP_TOKEN_CHOICE%"=="2" set LITVMSWAP_TOKEN=LITVMSWAP
+if "%LITVMSWAP_TOKEN_CHOICE%"=="3" set LITVMSWAP_TOKEN=ZKUSDT
+if "%LITVMSWAP_TOKEN_CHOICE%"=="4" set LITVMSWAP_TOKEN=LETH
+if "%LITVMSWAP_TOKEN_CHOICE%"=="5" set LITVMSWAP_TOKEN=ZKBTC
+if "%LITVMSWAP_TOKEN_CHOICE%"=="6" set LITVMSWAP_TOKEN=LXRP
+if "%LITVMSWAP_TOKEN_CHOICE%"=="7" set LITVMSWAP_TOKEN=BRBNB
+if "%LITVMSWAP_TOKEN_CHOICE%"=="8" set LITVMSWAP_TOKEN=random
+if "%LITVMSWAP_TOKEN%"=="" (
+    echo [ERROR] Unknown token option.
+    pause
+    goto menu
+)
+set /p LITVMSWAP_COUNT_MIN=Min swaps per wallet [1]: 
+if "%LITVMSWAP_COUNT_MIN%"=="" set LITVMSWAP_COUNT_MIN=1
+set /p LITVMSWAP_COUNT_MAX=Max swaps per wallet [%LITVMSWAP_COUNT_MIN%]: 
+if "%LITVMSWAP_COUNT_MAX%"=="" set LITVMSWAP_COUNT_MAX=%LITVMSWAP_COUNT_MIN%
+set /p LITVMSWAP_AMOUNT_MIN=Min amount per swap zkLTC [0.001]: 
+if "%LITVMSWAP_AMOUNT_MIN%"=="" set LITVMSWAP_AMOUNT_MIN=0.001
+set /p LITVMSWAP_AMOUNT_MAX=Max amount per swap zkLTC [%LITVMSWAP_AMOUNT_MIN%]: 
+if "%LITVMSWAP_AMOUNT_MAX%"=="" set LITVMSWAP_AMOUNT_MAX=%LITVMSWAP_AMOUNT_MIN%
+set LITVMSWAP_SLIPPAGE=300
+set "LITVMSWAP_SWAPS=%LITVMSWAP_COUNT_MIN%-%LITVMSWAP_COUNT_MAX%"
+set "LITVMSWAP_AMOUNT=%LITVMSWAP_AMOUNT_MIN%-%LITVMSWAP_AMOUNT_MAX%"
+echo.
+python app\run_all_keys.py --pause-min 5 --pause-max 15 --success-if-any -- python app\litvmswap_swaps.py --swap-token "%LITVMSWAP_TOKEN%" --swaps "%LITVMSWAP_SWAPS%" --amount "%LITVMSWAP_AMOUNT%" --slippage-bps "%LITVMSWAP_SLIPPAGE%" --send
+set EXIT_CODE=%ERRORLEVEL%
+echo.
+set LAST_LITVMSWAP_LOG=
+for /f "delims=" %%F in ('dir /b /a:-d /o:-d "logs\litvmswap_swaps_*.log" 2^>nul') do (
+    set LAST_LITVMSWAP_LOG=%CD%\logs\%%F
+    goto litvmswap_log_found
+)
+:litvmswap_log_found
+if "%EXIT_CODE%"=="0" (
+    echo [OK] LitVMSwap swaps completed.
+) else (
+    echo [ERROR] LitVMSwap swaps failed.
+)
+if not "%LAST_LITVMSWAP_LOG%"=="" (
+    echo Last LitVMSwap log: %LAST_LITVMSWAP_LOG%
+) else (
+    echo [WARN] LitVMSwap log was not found.
 )
 pause
 goto menu
