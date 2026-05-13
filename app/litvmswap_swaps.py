@@ -53,6 +53,8 @@ ROUTER_ABI = [
     {"type": "function", "name": "getAmountsOut", "stateMutability": "view", "inputs": [{"type": "uint256"}, {"type": "address[]"}], "outputs": [{"type": "uint256[]"}]},
     {"type": "function", "name": "swapExactETHForTokens", "stateMutability": "payable", "inputs": [{"type": "uint256"}, {"type": "address[]"}, {"type": "address"}, {"type": "uint256"}], "outputs": [{"type": "uint256[]"}]},
     {"type": "function", "name": "swapExactETHForTokensSupportingFeeOnTransferTokens", "stateMutability": "payable", "inputs": [{"type": "uint256"}, {"type": "address[]"}, {"type": "address"}, {"type": "uint256"}], "outputs": []},
+    {"type": "function", "name": "swapExactTokensForETH", "stateMutability": "nonpayable", "inputs": [{"type": "uint256"}, {"type": "uint256"}, {"type": "address[]"}, {"type": "address"}, {"type": "uint256"}], "outputs": [{"type": "uint256[]"}]},
+    {"type": "function", "name": "swapExactTokensForETHSupportingFeeOnTransferTokens", "stateMutability": "nonpayable", "inputs": [{"type": "uint256"}, {"type": "uint256"}, {"type": "address[]"}, {"type": "address"}, {"type": "uint256"}], "outputs": []},
 ]
 
 
@@ -120,9 +122,12 @@ def parse_int_or_range(value: str, name: str) -> int:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="LitVMSwap real swaps on LiteForge")
+    parser.add_argument("--mode", default="buy", choices=["buy", "sell-back"], help="buy tokens with zkLTC or sell tokens back to native zkLTC")
     parser.add_argument("--swap-token", default="random", choices=["random", *sorted(TOKENS)], help="token to buy with native zkLTC")
-    parser.add_argument("--amount", required=True, type=lambda v: parse_decimal_or_range(v, "amount"), help="native zkLTC amount or range per swap")
+    parser.add_argument("--sell-token", default="all", choices=["all", *sorted(TOKENS)], help="token to sell back to native zkLTC")
+    parser.add_argument("--amount", default=Decimal("0"), type=lambda v: parse_decimal_or_range(v, "amount"), help="native zkLTC amount or range per buy swap")
     parser.add_argument("--swaps", default=1, type=lambda v: parse_int_or_range(v, "swaps"), help="swap count or range per wallet")
+    parser.add_argument("--sell-pct", default=Decimal("100"), type=lambda v: parse_decimal_or_range(v, "sell-pct"), help="percent of token balance to sell, default 100")
     parser.add_argument("--slippage-bps", default=300, type=int, help="slippage in basis points, default 300 = 3%")
     parser.add_argument("--send", action="store_true", help="required: send real transactions")
     return parser.parse_args()
@@ -152,6 +157,10 @@ def from_wei(amount: int) -> Decimal:
 
 def deadline() -> int:
     return int(time.time()) + 20 * 60
+
+
+def token_contract(w3: Web3, token: str):
+    return w3.eth.contract(address=Web3.to_checksum_address(token), abi=ERC20_ABI)
 
 
 def get_safe_pending_nonce(account_address: str, fallback_nonce: int | None = None) -> int:
@@ -239,6 +248,18 @@ def build_and_send(w3: Web3, account, tx: dict, nonce: int, label: str, log: log
     raise RuntimeError(f"{label} send failed: {last_error}")
 
 
+def ensure_allowance(w3: Web3, account, token: str, spender: str, amount: int, nonce: int, log: logging.Logger) -> int:
+    contract = token_contract(w3, token)
+    allowance = contract.functions.allowance(account.address, spender).call()
+    if allowance >= amount:
+        return nonce
+    log.info("Approve %s to %s", token, spender)
+    tx = contract.functions.approve(spender, MAX_UINT256).build_transaction({"from": account.address, "gas": 1})
+    _, nonce = build_and_send(w3, account, tx, nonce, "litvmswap-approve", log)
+    sleep_between_swaps(log)
+    return nonce
+
+
 def sleep_between_swaps(log: logging.Logger) -> None:
     seconds = random.uniform(2, 5)
     log.info("Pause between LitVMSwap swaps: %.1fs", seconds)
@@ -286,6 +307,67 @@ def swap_native_to_token(
     return nonce
 
 
+def sell_token_to_native(
+    w3: Web3,
+    account,
+    router,
+    token_symbol: str,
+    amount_wei: int,
+    nonce: int,
+    args: argparse.Namespace,
+    log: logging.Logger,
+) -> int:
+    token = TOKENS[token_symbol]
+    path = [token, WZKLTC]
+    quoted, min_out = quote_min(router, amount_wei, path, args.slippage_bps)
+    if quoted <= 0 or min_out <= 0:
+        log.warning("%s sell skipped: zero quote", token_symbol)
+        return nonce
+    log.info(
+        "Swap %s -> zkLTC: %s %s, quoted %s zkLTC, min %s zkLTC",
+        token_symbol,
+        from_wei(amount_wei),
+        token_symbol,
+        from_wei(quoted),
+        from_wei(min_out),
+    )
+    nonce = ensure_allowance(w3, account, token, ROUTER, amount_wei, nonce, log)
+    tx = router.functions.swapExactTokensForETHSupportingFeeOnTransferTokens(
+        amount_wei,
+        min_out,
+        path,
+        account.address,
+        deadline(),
+    ).build_transaction({"from": account.address, "gas": 1})
+    _, nonce = build_and_send(w3, account, tx, nonce, f"litvmswap-{token_symbol}-zkLTC", log)
+    return nonce
+
+
+def sell_back_tokens(w3: Web3, account, router, nonce: int, args: argparse.Namespace, log: logging.Logger) -> int:
+    token_symbols = sorted(TOKENS) if args.sell_token == "all" else [args.sell_token]
+    sold = 0
+    for token_symbol in token_symbols:
+        contract = token_contract(w3, TOKENS[token_symbol])
+        balance = contract.functions.balanceOf(account.address).call()
+        if balance <= 0:
+            log.info("%s skipped: zero balance", token_symbol)
+            continue
+        amount = int(Decimal(balance) * args.sell_pct / Decimal(100))
+        if amount <= 0:
+            log.info("%s skipped: sell amount is zero", token_symbol)
+            continue
+        try:
+            nonce = sell_token_to_native(w3, account, router, token_symbol, amount, nonce, args, log)
+            sold += 1
+            sleep_between_swaps(log)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("%s sell failed, skipped: %s", token_symbol, exc)
+    if sold == 0:
+        raise RuntimeError("No LitVMSwap tokens were sold back")
+    log.info("Sell-back completed: %s token swaps", sold)
+    return nonce
+
+
 def main() -> int:
     args = parse_args()
     log_file = setup_logging()
@@ -297,10 +379,13 @@ def main() -> int:
         if args.slippage_bps < 1 or args.slippage_bps > 2000:
             log.error("Slippage must be 1..2000 bps")
             return 1
+        if args.sell_pct <= 0 or args.sell_pct > 100:
+            log.error("sell-pct must be in range 0..100")
+            return 1
         if args.swaps < 1 or args.swaps > 20:
             log.error("Swaps per wallet must be 1..20")
             return 1
-        if args.amount <= 0:
+        if args.mode == "buy" and args.amount <= 0:
             log.error("Amount must be greater than 0")
             return 1
 
@@ -312,17 +397,23 @@ def main() -> int:
         log.info("Wallet: %s", account.address)
         log.info("LitVMSwap router: %s", ROUTER)
         log.info("Wrapped native: %s", WZKLTC)
+        log.info("Mode: %s", args.mode)
+        log.info("Slippage: %s bps", args.slippage_bps)
+
+        if args.mode == "sell-back":
+            log.info("Sell token: %s", args.sell_token)
+            log.info("Sell percent: %s", args.sell_pct)
+            sell_back_tokens(w3, account, router, nonce, args, log)
+            log.info("LitVMSwap sell-back completed")
+            return 0
+
         log.info("Swaps per wallet: %s", args.swaps)
         log.info("Amount per swap: %s zkLTC", args.amount)
-        log.info("Slippage: %s bps", args.slippage_bps)
-        log.info("Mode: SEND")
-
         balance = w3.eth.get_balance(account.address)
         needed = to_wei(args.amount) * args.swaps
         log.info("Native balance: %s zkLTC", from_wei(balance))
         if balance <= needed:
             raise RuntimeError(f"Native balance is too low for swaps: need > {from_wei(needed)} zkLTC plus gas")
-
         for index in range(1, args.swaps + 1):
             token_symbol = pick_token(args.swap_token)
             log.info("[swap %s/%s] target token: %s", index, args.swaps, token_symbol)

@@ -576,6 +576,17 @@ echo Source token is native zkLTC.
 echo Router:
 echo   0xF456737D17C2Bbb348fd4F7D1b000D62A46FB3b5
 echo.
+echo Action:
+echo   1. Swap zkLTC to token
+echo   2. Swap tokens back to zkLTC
+set /p LITVMSWAP_MODE_CHOICE=Choose action [1]: 
+if "%LITVMSWAP_MODE_CHOICE%"=="" set LITVMSWAP_MODE_CHOICE=1
+if "%LITVMSWAP_MODE_CHOICE%"=="2" goto litvmswap_sell_back
+if not "%LITVMSWAP_MODE_CHOICE%"=="1" (
+    echo [ERROR] Unknown LitVMSwap action.
+    pause
+    goto menu
+)
 echo Target token:
 echo   1. ZKUSDC
 echo   2. LitVMSwap
@@ -615,6 +626,43 @@ set "LITVMSWAP_AMOUNT=%LITVMSWAP_AMOUNT_MIN%-%LITVMSWAP_AMOUNT_MAX%"
 echo.
 python app\run_all_keys.py --pause-min 5 --pause-max 15 --success-if-any -- python app\litvmswap_swaps.py --swap-token "%LITVMSWAP_TOKEN%" --swaps "%LITVMSWAP_SWAPS%" --amount "%LITVMSWAP_AMOUNT%" --slippage-bps "%LITVMSWAP_SLIPPAGE%" --send
 set EXIT_CODE=%ERRORLEVEL%
+goto litvmswap_done
+
+:litvmswap_sell_back
+echo.
+echo Sell token back to native zkLTC:
+echo   1. All LitVMSwap tokens
+echo   2. ZKUSDC
+echo   3. LitVMSwap
+echo   4. ZKUSDT
+echo   5. LETH
+echo   6. ZKBTC
+echo   7. LXRP
+echo   8. brBNB
+set LITVMSWAP_SELL_TOKEN=
+set /p LITVMSWAP_SELL_TOKEN_CHOICE=Choose token [1]: 
+if "%LITVMSWAP_SELL_TOKEN_CHOICE%"=="" set LITVMSWAP_SELL_TOKEN_CHOICE=1
+if "%LITVMSWAP_SELL_TOKEN_CHOICE%"=="1" set LITVMSWAP_SELL_TOKEN=all
+if "%LITVMSWAP_SELL_TOKEN_CHOICE%"=="2" set LITVMSWAP_SELL_TOKEN=ZKUSDC
+if "%LITVMSWAP_SELL_TOKEN_CHOICE%"=="3" set LITVMSWAP_SELL_TOKEN=LITVMSWAP
+if "%LITVMSWAP_SELL_TOKEN_CHOICE%"=="4" set LITVMSWAP_SELL_TOKEN=ZKUSDT
+if "%LITVMSWAP_SELL_TOKEN_CHOICE%"=="5" set LITVMSWAP_SELL_TOKEN=LETH
+if "%LITVMSWAP_SELL_TOKEN_CHOICE%"=="6" set LITVMSWAP_SELL_TOKEN=ZKBTC
+if "%LITVMSWAP_SELL_TOKEN_CHOICE%"=="7" set LITVMSWAP_SELL_TOKEN=LXRP
+if "%LITVMSWAP_SELL_TOKEN_CHOICE%"=="8" set LITVMSWAP_SELL_TOKEN=BRBNB
+if "%LITVMSWAP_SELL_TOKEN%"=="" (
+    echo [ERROR] Unknown token option.
+    pause
+    goto menu
+)
+set /p LITVMSWAP_SELL_PCT=Percent of token balance to sell [100]: 
+if "%LITVMSWAP_SELL_PCT%"=="" set LITVMSWAP_SELL_PCT=100
+set LITVMSWAP_SLIPPAGE=300
+echo.
+python app\run_all_keys.py --pause-min 5 --pause-max 15 --success-if-any -- python app\litvmswap_swaps.py --mode sell-back --sell-token "%LITVMSWAP_SELL_TOKEN%" --sell-pct "%LITVMSWAP_SELL_PCT%" --slippage-bps "%LITVMSWAP_SLIPPAGE%" --send
+set EXIT_CODE=%ERRORLEVEL%
+
+:litvmswap_done
 echo.
 set LAST_LITVMSWAP_LOG=
 for /f "delims=" %%F in ('dir /b /a:-d /o:-d "logs\litvmswap_swaps_*.log" 2^>nul') do (

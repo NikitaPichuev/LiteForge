@@ -159,11 +159,15 @@ Sends real swaps through the LitVMSwap LiteForge router:
 
 The menu asks for:
 
-- target token: `ZKUSDC`, `LitVMSwap`, `ZKUSDT`, `LETH`, `ZKBTC`, `LXRP`, `brBNB`, or random
-- min/max swaps per wallet
-- min/max native `zkLTC` amount per swap
+- action: buy tokens with native `zkLTC`, or swap tokens back to native `zkLTC`
+- target token for buy: `ZKUSDC`, `LitVMSwap`, `ZKUSDT`, `LETH`, `ZKBTC`, `LXRP`, `brBNB`, or random
+- min/max swaps per wallet for buy mode
+- min/max native `zkLTC` amount per swap for buy mode
+- token and balance percent for sell-back mode
 
 Slippage is fixed by the menu at 300 bps (3%). The script runs all wallets from `keys.txt` through `app/run_all_keys.py`.
+
+Sell-back mode checks ERC20 balances for the selected token, or all LitVMSwap tokens, approves the router if needed, then swaps the selected percent back to native `zkLTC`. Zero balances and tokens without a valid quote are skipped.
 
 ## MidasPredict Submenu
 
@@ -272,6 +276,7 @@ node app\midaspredict_trader.js random-buy --source standard --count-min 2 --cou
 node app\midaspredict_trader.js sell-all --slippage-bps 300 --send
 node app\midaspredict_trader.js redeem-all --send
 python app\litvmswap_swaps.py --swap-token random --swaps 1-3 --amount 0.001-0.003 --slippage-bps 300 --send
+python app\litvmswap_swaps.py --mode sell-back --sell-token all --sell-pct 100 --slippage-bps 300 --send
 ```
 
 ## Logs
