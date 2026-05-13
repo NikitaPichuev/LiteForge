@@ -18,6 +18,7 @@ const API_BASE = process.env.MIDAS_API_BASE || "https://predict-testnet-api.mida
 const DEFAULT_RPC_URL = "https://liteforge.rpc.caldera.xyz/http";
 const BPS = ethers.BigNumber.from(10_000);
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+const MIDAS_MARKET_HELPER = "0xA10BaC04371b5DC33a3C2C938808335bb8c2d02e";
 
 const ERC20_ABI = [
   "function approve(address spender, uint256 amount) returns (bool)",
@@ -45,6 +46,10 @@ const MIDAS_MARKET_ABI = [
   "function getRedeemableAmountPerShare() view returns (uint256)",
   "function MARKET_OUTCOME() view returns (address)",
   "function getMarket() view returns (tuple(address resolver,uint40 expiresAt,uint40 startsAt,uint16 creatorFeeBps,address creator,uint40 resolvedAt,uint16 protocolFeeBpsOverride,uint8 outcomeCount,uint8 winningOutcome,uint8 status,bool overrideProtocolFeeBps,address collateralToken,address resolvedBy,uint256 initialSharesPerOutcome,uint256 collateralAmount,uint256 redeemableAmountPerShare,uint256 resolverFee,tuple(uint256 T0,uint256 alpha0Bps,uint256 T1,uint256 alpha1Bps,uint256 T2,uint256 alpha2Bps,uint256 c1_fp,uint256 c2_fp) alphaConfig))",
+];
+
+const MIDAS_MARKET_HELPER_ABI = [
+  "function getSharesForCollateralInMarket(address market, uint8 outcome, uint256 collateralAmount) view returns (uint256)",
 ];
 
 function timestamp() {
@@ -586,6 +591,19 @@ async function findShareAmountForBaseTarget(market, outcomes, targetBase, decima
   return high;
 }
 
+async function findShareAmountLikeFrontend(providerOrSigner, market, marketAddress, outcome, targetBase, minBase, decimals) {
+  const helperInput = targetBase.eq(minBase) ? targetBase.add(ethers.BigNumber.from(10_000)) : targetBase;
+  try {
+    const helper = new ethers.Contract(MIDAS_MARKET_HELPER, MIDAS_MARKET_HELPER_ABI, providerOrSigner);
+    const shares = await helper.getSharesForCollateralInMarket(marketAddress, outcome, helperInput);
+    if (shares.gt(0)) return shares;
+    log("WARNING", "Midas helper returned zero shares; falling back to local sizing");
+  } catch (error) {
+    log("WARNING", `Midas helper sizing failed; falling back to local sizing: ${error.message || error}`);
+  }
+  return findShareAmountForBaseTarget(market, [outcome], targetBase, decimals);
+}
+
 function shuffle(items) {
   const copy = [...items];
   for (let i = copy.length - 1; i > 0; i -= 1) {
@@ -839,7 +857,15 @@ async function doBuy(parsed) {
     if (parsed.autoMinTrade && targetBase.lt(minBase)) targetBase = minBase;
     if (nativeCollateral && parsed.nativePercentSizing && targetBase.gt(maxBase)) targetBase = maxBase;
     if (targetBase.gt(maxBase)) throw new Error(`Target trade too large: target=${targetBase.toString()} max=${maxBase.toString()}`);
-    finalAmount = await findShareAmountForBaseTarget(market, outcomes, targetBase, decimals);
+    finalAmount = await findShareAmountLikeFrontend(
+      signerOrProvider,
+      market,
+      marketAddress,
+      parsed.outcome,
+      targetBase,
+      minBase,
+      decimals
+    );
     parsed.amount = ethers.utils.formatUnits(finalAmount, decimals);
   } else {
     finalAmount = ethers.utils.parseUnits(parsed.amount, decimals);
